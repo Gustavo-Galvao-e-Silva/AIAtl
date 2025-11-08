@@ -8,3 +8,6 @@
 /dataSources.local.xml
 
 data/ 
+*.pth
+splitData/ 
+*.DS_Store

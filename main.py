@@ -7,7 +7,7 @@ from PIL import Image
 import os
 
 def main():
-    DATA_PATH = "data/e-waste_split"
+    DATA_PATH = "AIAtl/splitData/cardboard_split"
     IMG_SIZE = 224
     BATCH_SIZE = 8
     EPOCHS = 5
@@ -72,7 +72,7 @@ def main():
         avg_loss = running_loss / len(train_loader) if len(train_loader) > 0 else 0.0
         print(f"Epoch {epoch+1} finished. Avg Loss: {avg_loss:.4f}, Val Acc: {val_acc:.2f}%\n")
 
-    torch.save(model.state_dict(), "mobilenetv3_ewaste.pth")
+    torch.save(model.state_dict(), "AIAtl/model/mobilenetv3_ewaste.pth")
     print("Model saved.")
 
 if __name__ == "__main__":

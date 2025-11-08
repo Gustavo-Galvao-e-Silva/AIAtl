@@ -3,13 +3,14 @@ import random
 import shutil
 
 # Path to your folder
-source_folder = "data/e-waste"
+parent_folder = "AIAtl/data"
 
-def split(source_folder):
+
+def split(source_folder, subfolder):
     # Paths for the splits
-    train_folder = "data/e-waste_split/train"
-    test_folder = "data/e-waste_split/test"
-    val_folder = "data/e-waste_split/val"
+    train_folder = f"AIAtl/splitData/train/{subfolder}"
+    test_folder = f"AIAtl/splitData/test/{subfolder}"
+    val_folder = f"AIAtl/splitData/val/{subfolder}"
 
     # Create destination folders if they don't exist
     for folder in [train_folder, test_folder, val_folder]:
@@ -41,4 +42,9 @@ def split(source_folder):
 
     print(f"Train: {len(train_files)}, Test: {len(test_files)}, Val: {len(val_files)}")
 
-split(source_folder)
+for subfolder in os.listdir(parent_folder):
+    subfolder_path = os.path.join(parent_folder, subfolder)
+    if not os.path.isdir(subfolder_path) or subfolder.startswith('.'): #patch for us mac users LOL
+        continue
+    print("Processing:", subfolder_path)
+    split(subfolder_path, subfolder)
