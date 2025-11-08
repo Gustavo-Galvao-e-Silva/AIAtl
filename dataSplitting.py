@@ -3,13 +3,13 @@ import random
 import shutil
 
 # Path to your folder
-source_folder = "D:/hcmeh/Documents/Romil Mehta - School Related/2nd Year/RecycleVision/AIAtl/data/e-waste"
+source_folder = "data/e-waste"
 
 def split(source_folder):
     # Paths for the splits
-    train_folder = "D:/hcmeh/Documents/Romil Mehta - School Related/2nd Year/RecycleVision/AIAtl/data/e-waste_split/train"
-    test_folder = "D:/hcmeh/Documents/Romil Mehta - School Related/2nd Year/RecycleVision/AIAtl/data/e-waste_split/test"
-    val_folder = "D:/hcmeh/Documents/Romil Mehta - School Related/2nd Year/RecycleVision/AIAtl/data/e-waste_split/val"
+    train_folder = "data/e-waste_split/train"
+    test_folder = "data/e-waste_split/test"
+    val_folder = "data/e-waste_split/val"
 
     # Create destination folders if they don't exist
     for folder in [train_folder, test_folder, val_folder]:
