@@ -7,6 +7,18 @@ import requests
 from PIL import Image
 import streamlit as st
 
+# Import model predictor
+MODEL_AVAILABLE = False
+try:
+    from model_predictor import get_model, predict_image
+    MODEL_AVAILABLE = True
+except ImportError as e:
+    # Only show warning in sidebar, not at top level
+    pass
+except Exception as e:
+    # Only show error in sidebar, not at top level
+    pass
+
 # -------------- Page Setup --------------
 st.set_page_config(page_title="RecycleVision", page_icon="♻️", layout="centered")
 
@@ -24,23 +36,59 @@ st.markdown(
 )
 
 st.markdown("<h1 class='centered-title'>RecycleVision</h1>", unsafe_allow_html=True)
-st.markdown("<p class='subtitle'>Snap a photo → Send to backend → Identify the material & product type</p>", unsafe_allow_html=True)
+st.markdown("<p class='subtitle'>Snap a photo → AI identifies recyclable materials & categories</p>", unsafe_allow_html=True)
 st.divider()
 
 # -------------- Sidebar Controls --------------
 with st.sidebar:
     st.header("Settings")
-    backend_url = st.text_input(
-        "Backend API URL",
-        value=os.environ.get("RECYCLEVISION_API", "http://localhost:8000/predict"),
-        help="Endpoint that accepts a multipart form upload with an image.",
-    )
-    demo_mode = st.toggle(
-        "Demo mode (simulate response)",
-        value=False,
-        help="Use this if your backend isn't ready yet.",
-    )
-    st.caption("In production, host the backend with HTTPS for camera access across browsers.")
+    
+    # Model selection
+    if MODEL_AVAILABLE:
+        use_local_model = st.toggle(
+            "Use Local Model",
+            value=True,
+            help="Use the trained local model for predictions (recommended).",
+        )
+    else:
+        use_local_model = False
+        try:
+            from model_predictor import get_model, predict_image
+            # If we get here, model is actually available
+            MODEL_AVAILABLE = True
+            use_local_model = st.toggle(
+                "Use Local Model",
+                value=True,
+                help="Use the trained local model for predictions (recommended).",
+            )
+        except Exception as e:
+            st.warning(f"Local model not available: {str(e)[:50]}... Using backend API.")
+    
+    if not use_local_model:
+        backend_url = st.text_input(
+            "Backend API URL",
+            value=os.environ.get("RECYCLEVISION_API", "http://localhost:8000/predict"),
+            help="Endpoint that accepts a multipart form upload with an image.",
+        )
+        demo_mode = st.toggle(
+            "Demo mode (simulate response)",
+            value=False,
+            help="Use this if your backend isn't ready yet.",
+        )
+    else:
+        demo_mode = False
+        st.info("✓ Using local trained model")
+        # Try to load model info
+        try:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            model_dir = os.path.join(script_dir, "model")
+            model_path = os.path.join(model_dir, "mobilenetv3_recyclable_classifier.pth")
+            if os.path.exists(model_path):
+                st.caption(f"Model: {os.path.basename(model_path)}")
+        except:
+            pass
+    
+    st.caption("In production, host with HTTPS for camera access across browsers.")
 
 # -------------- Main Layout --------------
 left, right = st.columns([1, 1], gap="large")
@@ -63,6 +111,7 @@ def render_results_box(payload: dict | None):
                 payload.get("product_type")
                 or payload.get("predicted_type")
                 or payload.get("type")
+                or payload.get("predicted_class")
                 or "Unknown"
             )
             material = (
@@ -70,10 +119,14 @@ def render_results_box(payload: dict | None):
                 or payload.get("material")
                 or payload.get("label")
                 or payload.get("class")
+                or payload.get("predicted_class")
                 or "Unknown"
             )
             conf = payload.get("confidence") or payload.get("score") or payload.get("probability")
             tips = payload.get("tips") or payload.get("recommendations")
+            
+            # Show top predictions if available
+            top_predictions = payload.get("top_predictions", [])
 
             st.write(f"**Type of Product (predicted):** {pred_type}")
             st.write(f"**Material:** {material}")
@@ -95,6 +148,13 @@ def render_results_box(payload: dict | None):
                         st.write(f"• {t}")
                 else:
                     st.write(f"• {tips}")
+            
+            # Show top predictions if available
+            if top_predictions and len(top_predictions) > 1:
+                st.write("**Other possibilities:**")
+                for i, pred in enumerate(top_predictions[1:], 1):
+                    pred_conf = pred.get("confidence", 0) * 100 if pred.get("confidence", 0) <= 1 else pred.get("confidence", 0)
+                    st.write(f"  {i}. {pred.get('class', 'Unknown')}: {pred_conf:.1f}%")
 
             with st.expander("Raw response"):
                 st.code(json.dumps(payload, indent=2), language="json")
@@ -161,7 +221,87 @@ if analyze_clicked:
     if image_bytes is None:
         st.error("Please capture or upload an image before analyzing.")
     else:
-        if demo_mode:
+        if use_local_model and MODEL_AVAILABLE:
+            # -------- LOCAL MODEL PREDICTION --------
+            try:
+                with st.spinner("Analyzing with local model…"):
+                    # Get model (will cache after first load)
+                    script_dir = os.path.dirname(os.path.abspath(__file__))
+                    model, device, class_names = get_model(script_dir)
+                    
+                    # Load and predict image
+                    image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+                    payload = predict_image(model, image, class_names, device)
+                    
+                    # Add recycling tips based on material
+                    material = payload.get("predicted_class", "").lower()
+                    tips = []
+                    if "plastic" in material:
+                        tips = [
+                            "Check local recycling guidelines for plastic types.",
+                            "Rinse containers before recycling.",
+                            "Remove caps and labels if required."
+                        ]
+                    elif "glass" in material:
+                        tips = [
+                            "Rinse glass containers thoroughly.",
+                            "Remove metal caps and labels.",
+                            "Don't break glass - recycle whole."
+                        ]
+                    elif "metal" in material or "aluminum" in material:
+                        tips = [
+                            "Rinse metal containers.",
+                            "Aluminum cans are highly recyclable.",
+                            "Check if local program accepts metal."
+                        ]
+                    elif "paper" in material or "cardboard" in material:
+                        tips = [
+                            "Keep paper dry and clean.",
+                            "Remove plastic wrap or tape.",
+                            "Flatten cardboard boxes."
+                        ]
+                    elif "e-waste" in material or "electronic" in material:
+                        tips = [
+                            "E-waste requires special handling.",
+                            "Find local e-waste recycling centers.",
+                            "Don't throw electronics in regular trash."
+                        ]
+                    elif "organic" in material:
+                        tips = [
+                            "Compost organic materials if possible.",
+                            "Check local composting programs.",
+                            "Remove any non-organic materials."
+                        ]
+                    else:
+                        tips = [
+                            "Check local recycling guidelines.",
+                            "When in doubt, check with your local waste management."
+                        ]
+                    
+                    payload["tips"] = tips
+                
+                # Update the Results panel
+                with right:
+                    results_placeholder.empty()
+                    render_results_box(payload)
+                st.success("Analysis complete!")
+                
+            except FileNotFoundError as e:
+                st.error(f"Model not found: {e}")
+                st.info("Please train the model first using main.py")
+                with right:
+                    results_placeholder.empty()
+                    render_results_box({"error": "Model not found", "message": str(e)})
+            except Exception as e:
+                st.error(f"Prediction error: {e}")
+                import traceback
+                with right:
+                    results_placeholder.empty()
+                    render_results_box({"error": "Prediction failed", "message": str(e)})
+                with st.expander("Error details"):
+                    st.code(traceback.format_exc())
+        
+        elif demo_mode:
             # -------- DEMO RESPONSE (no backend needed) --------
             with st.spinner("Analyzing (demo)…"):
                 import random, time
