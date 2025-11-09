@@ -214,11 +214,11 @@ if analyze_clicked:
                             model="gpt-4o-mini",  # lightweight, fast model; good choice
                             messages=[
                                 {"role": "system", "content": "You are a helpful recycling assistant."},
-                                {"role": "user", "content": f"What are some tips for recycling objects made of {material}?"}
+                                {"role": "user", "content": f"What are 3 tips for recycling objects made of {material}?"}
                             ],
                         )
                         tips = [response.choices[0].message.content]
-                        print(tips)
+                        
                     else:
                         tips = [
                             "Check local recycling guidelines.",
